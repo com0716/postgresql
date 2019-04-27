@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include <libpq-fe.h>
+#include <arpa/inet.h>
 
 PGconn *getConnection(const char *conn_str)
 {
@@ -63,6 +64,112 @@ void execDemo(PGconn *conn)
 }
 
 
+
+void execParamsDemo(PGconn *conn)
+{
+	/**
+	PGresult *PQexecParams(PGconn *conn,
+		 const char *command,
+		 int nParams,
+		 const Oid *paramTypes,
+		 const char *const * paramValues,
+		 const int *paramLengths,
+		 const int *paramFormats,
+		 int resultFormat);
+	 */
+	
+	assert(NULL != conn);
+	
+	const char * command = "select * from student where id=$1";
+	int nParams = 1;
+	int student_id = htonl(2);  /*这里一定要注意大小端问题*/
+	const char *paramValues[] = {(char *)&student_id};
+	const int paramLengths[] = {sizeof(student_id)};
+	const int paramFormats[] = {1};
+
+	PGresult * res = PQexecParams(conn,
+								command,
+								nParams,
+								NULL,
+								paramValues,
+								paramLengths,
+								paramFormats,
+								0);
+	if (PGRES_TUPLES_OK != PQresultStatus(res))
+	{
+		fprintf(stderr, "query failed : %s\n", PQerrorMessage(conn));
+		PQclear(res);
+		return ;
+	}
+
+	displayResult(res);
+
+	PQclear(res);
+}
+
+void prepareDemo(PGconn * conn)
+{
+	/*
+	PGresult *PQprepare(PGconn *conn, const char *stmtName,
+		  const char *query, int nParams,
+		  const Oid *paramTypes);
+	 */
+	assert(NULL != conn);
+
+	const char *stmtName = "findStudentById";
+	const char *query = "select * from student where id=$1";
+	int nParams = 1;
+	const Oid paramTypes[] = {23};
+
+	PGresult *res = PQprepare(conn,
+							stmtName,
+							query,
+							nParams,
+							paramTypes);
+	if (PGRES_COMMAND_OK != PQresultStatus(res))
+	{
+		fprintf(stderr, "query failed : %s\n", PQerrorMessage(conn));
+		PQclear(res);
+		return ;
+	}
+
+	PQclear(res);
+	res = NULL;
+	fprintf(stderr, "Successfully prepared the statement\n");
+
+	/*
+	PGresult *PQexecPrepared(PGconn *conn,
+			   const char *stmtName,
+			   int nParams,
+			   const char *const * paramValues,
+			   const int *paramLengths,
+			   const int *paramFormats,
+			   int resultFormat);
+	 */
+	int student_id = htonl(1);
+	const char * paramValues[] = {(char *)&student_id};
+	const int paramLengths[] = {sizeof(student_id)};
+	const int paramFormats[] = {1};
+
+	res = PQexecPrepared(conn, 
+						stmtName,
+						nParams,
+						paramValues,
+						paramLengths,
+						paramFormats,
+						0);
+	if (PGRES_TUPLES_OK != PQresultStatus(res))
+	{
+		fprintf(stderr, "query failed : %s\n", PQerrorMessage(conn));
+		PQclear(res);
+		return ;
+	}
+
+	displayResult(res);
+
+	PQclear(res);
+}
+
 int main(int argc, char * argv[])
 {
 	const char *conn_str = "host=localhost port=8192 dbname=postgres";
@@ -71,7 +178,9 @@ int main(int argc, char * argv[])
 	fprintf(stdout, "Successfully connected database.\n");
 
 		
-	execDemo(conn);
+	//execDemo(conn);
+	//execParamsDemo(conn);
+	prepareDemo(conn);
 
 	if (NULL != conn)
 	{
